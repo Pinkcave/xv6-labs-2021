@@ -1,0 +1,25 @@
+1.Which registers contain arguments to functions? For example, which register holds 13 in main's call to printf?
+answer:
+From "24:4635 li a2,13" we can see that register a2 holds 13.Similarily:
+From"26:45b1 li	a1,12" we can see that register a1 holds f(8)+1, whose value equals to 12.
+From"8:	6422 ld	s0,8(sp)" and "10:e422 sd s0,8(sp)" we see that register s0 holds parameter x, whose value is 8.
+
+2.Where is the call to function f in the assembly code for main? Where is the call to g? (Hint: the compiler may inline functions.)
+answer:
+They're all optimilized by compiler, we cannot find the exclipt calls to them.
+
+3.At what address is the function printf located?
+answer:
+From "0000000000000628 <printf>", we find it located in 0x628.
+
+4.What value is in the register ra just after the jalr to printf in main?
+answer:
+For ra+1552 = 0x640，1552 = 0x610，we can infer that ra = 30.
+
+5.What is the output? Here's an ASCII table that maps bytes to characters.
+The output depends on that fact that the RISC-V is little-endian. If the RISC-V were instead big-endian what would you set i to in order to yield the same output? Would you need to change 57616 to a different value?
+n the following code, what is going to be printed after 'y='? (note: the answer is not a specific value.) Why does this happen?
+answer:
+Output is "He110 World".
+For big-endian, i should be set to 0x726c6400, no need to change 57616.
+For the function printf("x=%d y=%d", 3), the second output is about what is in the corresponding register.
