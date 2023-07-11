@@ -654,3 +654,17 @@ procdump(void)
     printf("\n");
   }
 }
+
+uint64
+nproc_count()
+{
+  uint64 count = 0;
+  for(struct proc *pproc = proc;pproc<&proc[NPROC];pproc++)
+  {
+    acquire(&pproc->lock);
+    if(pproc->state!=UNUSED)
+        count++;
+    release(&pproc->lock);
+  }
+  return count;
+}
