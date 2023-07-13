@@ -29,6 +29,52 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+int cowpagefault(pagetable_t pgt,uint va)
+{
+  if(va>MAXVA)
+    return 0;
+  pte_t *pte;
+  if((pte=walk(pgt,va,0))==0)
+    return 0;
+  if(!(*pte&PTE_V))
+    return 0;
+  if((*pte&PTE_W)==0 && (*pte&PTE_F))
+    return 1;
+  return 0;
+}
+
+void* cowpagealloc(pagetable_t pgt,uint va)
+{
+  if(va>MAXVA || va%PGSIZE!=0)
+    return 0;
+  uint64 pa = walkaddr(pgt,va);
+  if(pa == 0)
+    return 0;
+  pte_t* pte = walk(pgt, va, 0);
+  //引用不为1，分配空间
+  if(krefget((char*)pa)!=1)
+  {
+    char* mem = kalloc();
+    if(mem == 0)
+        return 0;
+    memmove(mem, (char*)pa, PGSIZE);
+    
+    *pte &= ~PTE_V;
+  
+    if(mappages(pgt, va, PGSIZE, (uint64)mem, (PTE_FLAGS(*pte) | PTE_W) & ~PTE_F) != 0) {
+      kfree(mem);
+      *pte |= PTE_V;
+      return 0;
+    }
+  
+    kfree((char*)PGROUNDDOWN(pa));
+    return (void*)mem;
+  }
+
+  *pte = *pte | PTE_W;
+  *pte = *pte & ~PTE_F;
+  return (void*)pa;
+}
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -65,7 +111,13 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  } 
+  else if (r_scause() == 13 || r_scause() == 15)
+  {
+    if(r_stval()>=p->sz||cowpagefault(p->pagetable,r_stval())!=0||cowpagealloc(p->pagetable,r_stval()))
+      p->killed = 1;
+  }
+  else if((which_dev = devintr()) != 0){
     // ok
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);

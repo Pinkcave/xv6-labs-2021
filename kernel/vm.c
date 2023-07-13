@@ -312,13 +312,24 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
+    if(flags & PTE_W)
+    {
+      flags = (flags|PTE_F) & ~PTE_W;
+      *pte = (uint64)(pte) | flags;
+    }
+    //不对子进程分配内存
+    /*
     if((mem = kalloc()) == 0)
       goto err;
     memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    */
+
+    //父子进程共享内存
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
       goto err;
     }
+    //增加引用计数
+    krefadd(pa);
   }
   return 0;
 
@@ -351,6 +362,11 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
+
+    if(cowpagefault(pagetable,va0)==0)
+    {
+      pa0 = (uint64)cowalloc(pagetable, va0);
+    }
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);

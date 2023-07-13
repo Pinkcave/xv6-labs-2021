@@ -23,10 +23,17 @@ struct {
   struct run *freelist;
 } kmem;
 
+struct
+{
+  struct spinlock lock;
+  int ref[PHYSTOP/PGSIZE];
+}ref2pages;
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  initlock(&ref2pages.lock,"ref2pages");
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -50,16 +57,24 @@ kfree(void *pa)
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
-
+  
+  acquire(&ref2pages.lock);
+  if(ref2pages.ref[(uint64)pa/PGSIZE]>0)
+    ref2pages.ref[(uint64)pa/PGSIZE]--;
+  if(ref2pages.ref[(uint64)pa/PGSIZE]==0){
+    release(&ref2pages.lock);
   // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
-
-  r = (struct run*)pa;
-
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+    memset(pa, 1, PGSIZE);
+  
+    r = (struct run*)pa;
+  
+    acquire(&kmem.lock);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    release(&kmem.lock);
+  }
+  else
+      release(&ref2pages.lock);
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -72,11 +87,34 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r){
     kmem.freelist = r->next;
+    acquire(&ref2pages.lock);
+    ref2pages.ref[(uint)r/PGSIZE] = 1;
+    release(&ref2pages);
+  }
   release(&kmem.lock);
-
+  
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+int 
+krefget(void* pa)
+{
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+    panic("kfrefadd");
+  
+  return ref2pages.ref[(uint64)pa/PGSIZE];
+}
+
+void
+krefadd(void* pa)
+{
+  if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+    panic("kfrefadd");
+  acquire(&ref2pages.lock);
+  ref2pages.ref[(uint64)pa/PGSIZE]++;
+  release(&ref2pages.lock);
 }
