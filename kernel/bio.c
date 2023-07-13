@@ -119,21 +119,27 @@ bget(uint dev, uint blockno)
   release(&bcache.bucketlock[id]);
 
   acquire(&bcache.biglock);
-  for(int i=0;i<NBUCKET;i++)
+  //寻找当前bucket
+  for(struct buf* pre = &bcache.bucket[id];pre->next!=0;pre=pre->next)
+  {
+    b=pre->next;
+    if(b->dev==dev&&b->blockno==blockno)
+    {
+      b->refcnt++;
+      release(&bcache.bucketlock[id]);
+      release(&bcache.biglock);
+      acquiresleep(&b->lock);
+      return b;
+    }
+  }
+  //当前bucket无，寻找其他bucket
+  for(int temp=hash(id+1);temp != id;temp = hash(temp+1))
   {
     mintimestamp=__INT32_MAX__;
     acquire(&bcache.bucketlock[id]);
     for(struct buf* pre = &bcache.bucket[id];pre->next!=0;pre=pre->next)
     {
       b=pre->next;
-      if(id==hash(blockno)&&b->dev==dev&&b->blockno==blockno)
-      {
-        b->refcnt++;
-        release(&bcache.bucketlock[id]);
-        release(&bcache.biglock);
-        acquiresleep(&b->lock);
-        return b;
-      }
       if(b->refcnt==0 && b->timestamp<mintimestamp)
       {
         minb=b;
@@ -160,7 +166,6 @@ bget(uint dev, uint blockno)
         acquiresleep(&minb->lock);
         return minb;
       }
-      id = (id+1)%NBUCKET;
     }
   }
 
