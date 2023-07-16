@@ -287,10 +287,12 @@ uint64
 sys_open(void)
 {
   char path[MAXPATH];
+  char target[MAXPATH];
   int fd, omode;
   struct file *f;
   struct inode *ip;
   int n;
+  int inum[MAXSYMLINK];
 
   if((n = argstr(0, path, MAXPATH)) < 0 || argint(1, &omode) < 0)
     return -1;
@@ -320,6 +322,51 @@ sys_open(void)
     iunlockput(ip);
     end_op();
     return -1;
+  }
+
+  if(ip->type == T_SYMLINK && (omode & O_NOFOLLOW == 0))
+  {
+    int i;
+    for(i=0;i<MAXSYMLINK;i++)
+    {
+      inum[i]=ip->inum;
+      if(readi(ip,0,(uint64)target,0,MAXPATH)<=0)
+      {
+        iunlockput(ip);
+        end_op();
+        printf("open symlink failed\n");
+        return -1;
+      }
+      iunlockput(ip);
+      
+      if((ip=namei(target))==0)
+      {
+        printf("\"%s\" is not a valid path",target);
+        end_op();
+        return -1;
+      }
+
+      for(int j=0;j<MAXSYMLINK;j++)
+      {
+        if(ip->inum==inum[j])
+        {
+          prinf("Form a cirle\n");
+          end_op();
+          return -1;
+        }
+      }
+      ilock(ip);
+      if(ip->type != T_SYMLINK)
+        break;
+    }
+
+    if(i==MAXSYMLINK)
+    {
+      iunlockput(ip);
+      printf("The depth of links reaches the limit\n");
+      end_op();
+      return -1;
+    }
   }
 
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
@@ -482,5 +529,35 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+int sys_symlink(void)
+{
+  char target[MAXPATH];
+  char path[MAXPATH];
+  struct inode* ip;
+
+  if(argstr(0,target,MAXPATH)<0||argstr(1,path,MAXPATH)<0)
+  {
+    return -1;
+  }
+
+  begin_op();
+  if((ip=create(path,T_SYMLINK,0,0))==0)
+  {
+    end_op();
+    return -1;
+  }
+
+  if(writei(ip,0,(uint64)&target,0,strlen(target))!=strlen(target))
+  {
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+
+  iunlockput(ip);
+  end_op();
   return 0;
 }
