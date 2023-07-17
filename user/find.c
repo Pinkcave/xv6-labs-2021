@@ -5,20 +5,13 @@
 
 char* fmtname(char *path)
 {
-  static char buf[DIRSIZ+1];
   char *p;
 
   // Find first character after last slash.
   for(p=path+strlen(path); p >= path && *p != '/'; p--)
     ;
   p++;
-
-  // Return blank-padded name.
-  if(strlen(p) >= DIRSIZ)
-    return p;
-  memmove(buf, p, strlen(p));
-  memset(buf+strlen(p), ' ', DIRSIZ-strlen(p));
-  return buf;
+  return p;
 }
 
 void find(char *path, char* filename)
@@ -48,16 +41,17 @@ void find(char *path, char* filename)
     break;
 
   case T_DIR:
-    if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf)
+    if(strlen(path) + 1 + DIRSIZ + 1 > sizeof(buf))
     {
       printf("ls: path too long\n");
+      close(fd);
       break;
     }
     strcpy(buf, path);
     p = buf+strlen(buf);
     *p++ = '/';
     while(read(fd, &de, sizeof(de)) == sizeof(de)){
-      if(de.inum == 0||strcmp(de.name,".")||strcmp(de.name,".."))
+      if(de.inum == 0||!strcmp(de.name,".")||!strcmp(de.name,".."))
         continue;
       memmove(p, de.name, DIRSIZ);
       p[DIRSIZ] = 0;
@@ -79,6 +73,6 @@ int main(int argc,char* argv[])
         printf("Usage:find <ROOTPATH> <FILENAME>\n");
         exit(1);
     }
-
-
+    find(argv[1],argv[2]);
+    exit(0);
 }

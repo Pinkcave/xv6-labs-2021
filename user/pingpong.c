@@ -10,7 +10,7 @@ int main(int argc,char* argv[])
    }
 
    int pipe1[2],pipe2[2];
-   char* buf = "abcd";
+   char buf[1] = {0};
    pipe(pipe1);
    pipe(pipe2);
    
@@ -42,7 +42,7 @@ int main(int argc,char* argv[])
            exit(5);
       }
       close(pipe2[0]);
-      printf("%d:received pong",getpid());
+      printf("%d:received pong\n",getpid());
       exit(0);
    }
    else
@@ -58,7 +58,7 @@ int main(int argc,char* argv[])
          exit(2);
       }
       close(pipe1[0]);
-      printf("%d:received ping",getpid());
+      printf("%d:received ping\n",getpid());
       //写数据
       if(write(pipe2[1],buf,sizeof(buf))!=sizeof(buf))
       {

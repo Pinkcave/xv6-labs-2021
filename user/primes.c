@@ -27,8 +27,10 @@ void primes(int* pipe_left)
         close(pipe_right[1]);
         exit(1);
     }
+    /*user/primes.c void primes(int* pipe_left)*/
     else if (pid>0)
     {
+        //parent process
         close(pipe_right[0]);
         while(read(pipe_left[0],&num,sizeof(num)))
         {
@@ -44,6 +46,7 @@ void primes(int* pipe_left)
     }
     else
     {
+        //child process
         close(pipe_left[0]);
         close(pipe_right[1]);
         primes(pipe_right);
