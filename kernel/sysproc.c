@@ -114,6 +114,11 @@ sys_info(void)
   if(argaddr(0,&addr)<0)
       return -1;
   struct sysinfo inf;
+  struct proc* p = myproc();
   inf.freemem = freemem_count();
   inf.nproc = nproc_count();
+
+  if (copyout(p->pagetable, addr, (char *)&inf, sizeof(inf)) < 0)
+    return -1;
+  return 0;
 }
