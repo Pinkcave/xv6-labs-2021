@@ -1,4 +1,3 @@
-#include "memlayout.h"
 
 // Saved registers for kernel context switches.
 struct context {

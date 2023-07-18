@@ -81,6 +81,15 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+    uint64 pgaddr;
+  int pgcount;
+  uint64 bufaddr;
+  if(argaddr(0,&pgaddr)<0||argint(1,&pgcount)<0||argaddr(2,&bufaddr)<0)
+      return -1;
+  struct proc* pr = myproc();
+  uint64 bitmask  = access_check(pr->pagetable,pgcount,pgaddr);
+  if(copyout(pr->pagetable,bufaddr,(char*)&bitmask,sizeof(uint64))<0)
+      return -1;
   return 0;
 }
 #endif
@@ -106,19 +115,4 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
-}
-
-uint64 
-sys_pgaccess(void)
-{
-  uint64 pgaddr;
-  int pgcount;
-  uint64 bufaddr;
-  if(argaddr(0,&pgaddr)<0||argint(1,&pgcount)<0||argaddr(2,&bufaddr)<0)
-      return -1;
-  struct proc* pr = myproc();
-  uint64 bitmask  = access_check(pr->pagetable,pgcount,pgaddr);
-  if(copyout(pr->pagetable,bufaddr,(char*)&bitmask,sizeof(uint64))<0)
-      return -1;
-  return 0;
 }

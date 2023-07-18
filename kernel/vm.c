@@ -440,16 +440,28 @@ void vmprintchild(pagetable_t pagetable, int depth)
       pte_t pte = pagetable[i];
       if(pte & PTE_V && (pte & (PTE_R|PTE_W|PTE_X)) == 0)
       {
-        for(int i=0;i<depth;i++)
+        for(int j=0;j<depth;j++)
         {
-            if(i==0)
+            if(j==0)
               printf("..");
             else
               printf(" ..");
         }
         uint64 child = PTE2PA(pte);
-        printf("%d:pte %p pa %p\n",i,child);
+        printf("%d: pte %p pa %p\n",i,pte,child);
         vmprintchild((pagetable_t)child,depth+1);
+      }
+      else if(pte & PTE_V)
+      {
+        for(int j=0;j<depth;j++)
+        {
+            if(j==0)
+              printf("..");
+            else
+              printf(" ..");
+        }
+        uint64 pa = PTE2PA(pte);
+        printf("%d: pte %p pa %p\n",i,pte,pa);
       }
     }
 }
