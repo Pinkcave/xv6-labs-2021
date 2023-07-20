@@ -102,7 +102,8 @@ sys_sigreturn(void)
 {
   struct proc* p = myproc();
 	*(p->trapframe) = *(p->lasttrap);
-	p->mutex = 1;
+	//p->mutex = 1;
+  p->ticks = 0;
   return 0;
 }
 
@@ -116,7 +117,8 @@ sys_sigalarm(void)
   if(interval<=0)
     return -1;
   struct proc *p = myproc();
-  p->handler = (void(*)())handler;
+  p->handler = handler;
   p->interval = interval;
+  p->ticks = 0;
   return 0;
 }

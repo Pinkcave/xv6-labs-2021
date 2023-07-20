@@ -120,7 +120,8 @@ found:
   p->pid = allocpid();
   p->state = USED;
   p->interval = 0;
-  p->mutex = 1;
+  //p->mutex = 1;
+  p->ticks = 0;
   p->handler = 0;
   p->lasttrap = 0;
 
@@ -177,7 +178,8 @@ freeproc(struct proc *p)
   p->xstate = 0;
   p->state = UNUSED;
   p->interval = 0;
-  p->mutex = 1;
+  //p->mutex = 1;
+  p->ticks = 0;
   p->handler = 0;
   p->lasttrap = 0;
 }
