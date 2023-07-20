@@ -167,6 +167,9 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 {
   uint64 a;
   pte_t *pte;
+  
+  if(va>MAXVA)
+    return;
 
   if((va % PGSIZE) != 0)
     panic("uvmunmap: not aligned");
@@ -178,9 +181,11 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
-    if(do_free){
-      uint64 pa = PTE2PA(*pte);
-      kfree((void*)pa);
+    uint64 pa = PTE2PA(*pte);
+    pa=PGROUNDDOWN(pa);
+    if(do_free)
+    {
+      kfree((void*)(pa));
     }
     *pte = 0;
   }
@@ -303,37 +308,32 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
-
+  //char *mem;
+  if(sz>MAXVA)
+    return -1;
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+    *pte &= (~PTE_W);
+    *pte |= (PTE_F);
     flags = PTE_FLAGS(*pte);
-    if(flags & PTE_W)
-    {
-      flags = (flags|PTE_F) & ~PTE_W;
-      *pte = (uint64)(pte) | flags;
-    }
-    //不对子进程分配内存
-    /*
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    */
+    //if((mem = kalloc()) == 0)
+      //goto err;
+    //memmove(mem, (char*)pa, PGSIZE);
 
-    //父子进程共享内存
-    if(mappages(new, i, PGSIZE, pa, flags) != 0){
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      //kfree(mem);
       goto err;
     }
-    //增加引用计数
-    krefadd(pa);
+    krefadd((void*)pa);
   }
   return 0;
 
  err:
+  
   uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
 }
@@ -344,7 +344,6 @@ void
 uvmclear(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
-  
   pte = walk(pagetable, va, 0);
   if(pte == 0)
     panic("uvmclear");
@@ -358,15 +357,15 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
+  if(cowpagefault(pagetable,dstva))
+  {
+      if(cowpagealloc(pagetable,dstva)==0)
+        return -1;
+  }
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
-
-    if(cowpagefault(pagetable,va0)==0)
-    {
-      pa0 = (uint64)cowalloc(pagetable, va0);
-    }
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);

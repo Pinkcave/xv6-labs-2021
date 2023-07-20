@@ -29,51 +29,54 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
-int cowpagefault(pagetable_t pgt,uint va)
+int cowpagefault(pagetable_t pgt,uint64 va)
 {
-  if(va>MAXVA)
+  if(va>=MAXVA)
     return 0;
   pte_t *pte;
   if((pte=walk(pgt,va,0))==0)
     return 0;
   if(!(*pte&PTE_V))
     return 0;
-  if((*pte&PTE_W)==0 && (*pte&PTE_F))
+  if(*pte&PTE_F)
     return 1;
   return 0;
 }
 
-void* cowpagealloc(pagetable_t pgt,uint va)
+void* cowpagealloc(pagetable_t pgt,uint64 va)
 {
-  if(va>MAXVA || va%PGSIZE!=0)
+  if(va<0||va>MAXVA)
     return 0;
-  uint64 pa = walkaddr(pgt,va);
-  if(pa == 0)
-    return 0;
-  pte_t* pte = walk(pgt, va, 0);
-  //引用不为1，分配空间
-  if(krefget((char*)pa)!=1)
+  va=PGROUNDDOWN(va);
+  pte_t *pte = walk(pgt, va, 0);
+  uint64 old_pa=PTE2PA(*pte);
+  if(krefget((void*)old_pa)==1)
   {
-    char* mem = kalloc();
-    if(mem == 0)
-        return 0;
-    memmove(mem, (char*)pa, PGSIZE);
-    
-    *pte &= ~PTE_V;
-  
-    if(mappages(pgt, va, PGSIZE, (uint64)mem, (PTE_FLAGS(*pte) | PTE_W) & ~PTE_F) != 0) {
-      kfree(mem);
-      *pte |= PTE_V;
-      return 0;
-    }
-  
-    kfree((char*)PGROUNDDOWN(pa));
-    return (void*)mem;
+    *pte |= PTE_W;
+    *pte &= (~PTE_F);
+    return (void*)old_pa;
   }
-
-  *pte = *pte | PTE_W;
-  *pte = *pte & ~PTE_F;
-  return (void*)pa;
+  else
+  {
+    void* new_pa=kalloc();
+    if(new_pa==0)
+    {
+      return new_pa;
+    }
+    else
+    {
+      //复制物理内存
+      memmove(new_pa,(void*)old_pa,PGSIZE);
+      uint flags = PTE_FLAGS(*pte);
+      uint64 new_pte=PA2PTE(new_pa);
+      *pte = new_pte | flags;
+      *pte |= PTE_W;
+      *pte &= (~PTE_F);
+      kfree((void*)old_pa);   
+      return new_pa;       
+    }
+  }
+  return 0;
 }
 //
 // handle an interrupt, exception, or system call from user space.
@@ -112,14 +115,23 @@ usertrap(void)
 
     syscall();
   } 
-  else if (r_scause() == 13 || r_scause() == 15)
-  {
-    if(r_stval()>=p->sz||cowpagefault(p->pagetable,r_stval())!=0||cowpagealloc(p->pagetable,r_stval()))
-      p->killed = 1;
-  }
+  
   else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  } 
+  else if(r_scause() == 13 || r_scause() == 15)
+  {
+    uint64 va = r_stval();    
+    if(cowpagefault(p->pagetable,va)==0)
+    {
+      p->killed = 1;
+    }
+    else if(cowpagealloc(p->pagetable,va)==0)
+    {
+      p->killed = 1;
+    }
+  }
+  else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
