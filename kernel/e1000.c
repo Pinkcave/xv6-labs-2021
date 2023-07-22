@@ -118,12 +118,13 @@ e1000_transmit(struct mbuf *m)
   tx_ring[end].length = m->len;
   tx_mbufs[end] = m;
   regs[E1000_TDT] = (end+1)%TX_RING_SIZE;
+  release(&e1000_lock);
   return 0;
 }
 
 static void
 e1000_recv(void)
-{
+{ 
   //
   // Your code here.
   //
@@ -135,14 +136,17 @@ e1000_recv(void)
   {
     if(rx_ring[end].length>MBUF_SIZE)
       panic("Out of Buf");
-    rx_mbufs[end] = rx_ring[end].length;
+    rx_mbufs[end]->len = rx_ring[end].length;
     net_rx(rx_mbufs[end]);
     rx_mbufs[end] = mbufalloc(0);
+    if(rx_mbufs[end]==0)
+      panic("no mbufs");
     rx_ring[end].addr = (uint64)(rx_mbufs[end]->head);
     rx_ring[end].status = 0;
     //next one
-    end = (end + 1) % TX_RING_SIZE;
+    end = (end + 1) % RX_RING_SIZE;
   }
+  regs[E1000_RDT] = (end - 1) % RX_RING_SIZE;
 }
 
 void
