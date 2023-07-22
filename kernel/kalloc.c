@@ -21,6 +21,7 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
+  char name[10];
 } kmem[NCPU];
 
 void
@@ -28,7 +29,8 @@ kinit()
 {
   for(int i=0;i<NCPU;i++)
   {
-    initlock(&kmem[i].lock, "kmem");
+    snprintf(kmem[i].name,10,"kmem_%d",i);
+    initlock(&kmem[i].lock, kmem[i].name);
   }
   freerange(end, (void*)PHYSTOP);
 }
@@ -101,6 +103,7 @@ kalloc(void)
       }
       release(&kmem[k].lock);
     }
+    release(&kmem[i].lock);
   }
   pop_off();
 

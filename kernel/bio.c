@@ -46,12 +46,12 @@ int hash(int blockno)
 void
 binit(void)
 {
-  struct buf *b;
+  //struct buf *b;
   initlock(&bcache.buflock,"bcache_buf");
-  initlock(&bcache.biglock, "bcache_outer");
+  initlock(&bcache.biglock, "bcache_big");
   for(int i=0;i<NBUCKET;i++)
   {
-    initlock(&bcache.bucketlock[i],"bcache_inner");
+    initlock(&bcache.bucketlock[i],"bcache_bucket");
   }
   for(int i=0;i<NBUF;i++)
   {
@@ -119,56 +119,50 @@ bget(uint dev, uint blockno)
   release(&bcache.bucketlock[id]);
 
   acquire(&bcache.biglock);
-  //寻找当前bucket
-  for(struct buf* pre = &bcache.bucket[id];pre->next!=0;pre=pre->next)
-  {
-    b=pre->next;
-    if(b->dev==dev&&b->blockno==blockno)
-    {
-      b->refcnt++;
-      release(&bcache.bucketlock[id]);
-      release(&bcache.biglock);
-      acquiresleep(&b->lock);
-      return b;
-    }
-  }
-  //当前bucket无，寻找其他bucket
-  for(int temp=hash(id+1);temp != id;temp = hash(temp+1))
-  {
-    mintimestamp=__INT32_MAX__;
-    acquire(&bcache.bucketlock[id]);
-    for(struct buf* pre = &bcache.bucket[id];pre->next!=0;pre=pre->next)
-    {
-      b=pre->next;
-      if(b->refcnt==0 && b->timestamp<mintimestamp)
-      {
-        minb=b;
-        minpre=pre;
-        mintimestamp=b->timestamp;
-      }
-      if(minb)
-      {
-        minb->dev=dev;
-        minb->blockno=blockno;
-        minb->valid=0;
-        minb->refcnt=1;
-        if(id!=hash(blockno))
-        {
-          minpre->next = minb->next;
-          release(&bcache.bucketlock[id]);
-          id = HASH(blockno);  // the correct bucket index
-          acquire(&bcache.bucketlock[id]);
-          minb->next = bcache.bucket[id].next;    // move block to correct bucket
-          bcache.bucket[id].next = minb;
-        }
-        release(&bcache.bucketlock[id]);
-        release(&bcache.biglock);
-        acquiresleep(&minb->lock);
-        return minb;
-      }
-    }
-  }
+  int tempid = id;
+  for(int i = 0; i < NBUCKET; i++) {
+      mintimestamp = -1;
+      acquire(&bcache.bucketlock[tempid]);
+      struct buf* pre;
+      for(pre = &bcache.bucket[tempid], b = pre->next; b!=0; pre = b, b = b->next) {
+          
+          if(tempid == id && b->dev == dev && b->blockno == blockno){
+              b->refcnt++;
+              release(&bcache.bucketlock[tempid]);
+              release(&bcache.biglock);
+              acquiresleep(&b->lock);
+              return b;
+          }
 
+          if(b->refcnt == 0 && b->timestamp < mintimestamp) {
+              minb = b;
+              minpre = pre;
+              mintimestamp = b->timestamp;
+          }
+      }
+      // find an unused block
+      if(minb) {
+          minb->dev = dev;
+          minb->blockno = blockno;
+          minb->valid = 0;
+          minb->refcnt = 1;
+          // if block in another bucket, we should move it to correct bucket
+          if(tempid != id) {
+              minpre->next = minb->next;    // remove block
+              release(&bcache.bucketlock[tempid]);
+              tempid = id;  // the correct bucket index
+              acquire(&bcache.bucketlock[tempid]);
+              minb->next = bcache.bucket[tempid].next;    // move block to correct bucket
+              bcache.bucket[tempid].next = minb;
+          }
+          release(&bcache.bucketlock[tempid]);
+          release(&bcache.biglock);
+          acquiresleep(&minb->lock);
+          return minb;
+      }
+      release(&bcache.bucketlock[tempid]);
+      tempid = hash(tempid + 1);
+  }
   
   /*
   // Not cached.
