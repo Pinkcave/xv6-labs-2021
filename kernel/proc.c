@@ -5,6 +5,13 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"  // lab10
+#include "sleeplock.h"  // lab10
+#include "fs.h"     // lab10
+#include "file.h"   // lab10
+
+#define min(a, b) ((a) < (b) ? (a) : (b))
+
 
 struct cpu cpus[NCPU];
 
@@ -300,6 +307,14 @@ fork(void)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
+  
+  for (i = 0; i < NVMA; i++) 
+  {
+    if (p->vma[i].addr) {
+      np->vma[i] = p->vma[i];
+      filedup(np->vma[i].f);
+    }
+  }
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 
@@ -340,10 +355,50 @@ void
 exit(int status)
 {
   struct proc *p = myproc();
-
+  struct VMA* vma=0;
   if(p == initproc)
     panic("init exiting");
-
+  for(int i=0;i<NVMA;i++)
+  {
+    if(p->vma[i].addr==0)
+      continue;
+    vma=&p->vma[i];
+    if(vma->flags & MAP_SHARED)
+    {
+      uint maxsize = ((MAXOPBLOCKS - 4) / 2) * BSIZE;
+      for(uint64 va = vma->addr;va<vma->addr+vma->len;va+=PGSIZE)
+      {
+        pte_t* pte = walk(p->pagetable,va,0);
+        if(pte==0 || (*pte & PTE_D)==0)
+          continue;
+        uint range,size;
+        range = min(vma->addr+vma->len-va,PGSIZE);
+        size = min(maxsize,range);
+        for(int r=0;r<range;r+=size)
+        {
+          size=min(maxsize,range-i);
+          begin_op();
+          ilock(vma->f->ip);
+          if(writei(vma->f->ip,1,va+i,va-vma->addr+vma->offset+i,size)!=size)
+          {
+            iunlock(vma->f->ip);
+            end_op();
+            panic("exit: writei failed");
+          }
+          iunlock(vma->f->ip);
+          end_op();
+        }
+      }
+    }
+    uvmunmap(p->pagetable, vma->addr, (vma->len - 1) / PGSIZE + 1, 1);
+    vma->addr = 0;
+    vma->len = 0;
+    vma->offset = 0;
+    vma->flags = 0;
+    vma->offset = 0;
+    fileclose(vma->f);
+    vma->f = 0;
+  }
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){
     if(p->ofile[fd]){

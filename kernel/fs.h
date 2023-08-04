@@ -58,3 +58,4 @@ struct dirent {
   char name[DIRSIZ];
 };
 
+#define min(a, b) ((a) < (b) ? (a) : (b))
