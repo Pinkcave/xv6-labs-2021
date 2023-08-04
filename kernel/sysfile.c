@@ -324,7 +324,7 @@ sys_open(void)
     return -1;
   }
 
-  if(ip->type == T_SYMLINK && (omode & O_NOFOLLOW == 0))
+  if(ip->type == T_SYMLINK && (omode & O_NOFOLLOW) == 0)
   {
     int i;
     for(i=0;i<MAXSYMLINK;i++)
@@ -345,12 +345,12 @@ sys_open(void)
         end_op();
         return -1;
       }
-
+      
       for(int j=0;j<MAXSYMLINK;j++)
       {
         if(ip->inum==inum[j])
         {
-          prinf("Form a cirle\n");
+          printf("Form a cirle\n");
           end_op();
           return -1;
         }
