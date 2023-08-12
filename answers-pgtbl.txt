@@ -1,0 +1,1 @@
+除了getpid()之外，我们还可以加速fork()函数。具体做法为在struct usyscall当中增加一个struct proc*成员parent，代表父进程。而后的映射方法同上文，这样就可以在用户态直接调用parent进行fork()操作，而不需要切换到内核态。
